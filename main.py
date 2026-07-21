@@ -91,6 +91,60 @@ class Pathfinder:
                 return start
         return cur
 
+class Action:
+    def __init__(self, command, score=0):
+        self.command = command
+        self.score = score
+
+    def __lt__(self, other):
+        return self.score < other.score
+
+class ActionGenerator:
+    def __init__(self, game):
+        self.game = game
+
+    def generate(self, agent):
+        actions = []
+        # Hunker
+        actions.append(Action("HUNKER_DOWN", 0))
+        # Déplacements
+        for p in agent.pos.neighbours():
+            if self.game.map.walkable(p):
+                actions.append(
+                    Action(f"MOVE {p.x} {p.y}", self.score_move(agent, p)))
+        # Tir
+        if agent.cooldown == 0:
+            for enemy in self.game.enemy_agents:
+                d = agent.pos.dist(enemy.pos)
+                if d <= agent.range:
+                    actions.append(Action(f"SHOOT {enemy.id}", self.score_shoot(agent, enemy)))
+        # Bombes
+        if agent.bombs > 0:
+            actions.extend(self.generate_bombs(agent))
+        actions.sort(reverse=True)
+        return actions
+
+    def score_move(self, agent, pos):
+        score = 0
+        enemy = self.game.closest_enemy(agent)
+        if enemy:
+            score -= pos.dist(enemy.pos)
+        return score
+
+    def score_shoot(self, agent, enemy):
+        d = agent.pos.dist(enemy.pos)
+        score = 200
+        score -= abs(d - agent.range)
+        score += enemy.wetness
+        return score
+
+    def generate_bombs(self, agent):
+        actions = []
+        for enemy in self.game.enemy_agents:
+            if agent.pos.dist(enemy.pos) <= 4:
+                actions.append(Action(f"THROW {enemy.pos.x} {enemy.pos.y}", 150))
+        return actions
+
 class Game:
     def __init__(self):
         self.my_id = int(input())
@@ -111,6 +165,7 @@ class Game:
         self.pathfinder = Pathfinder(self.map)
         self.my_agents = []
         self.enemy_agents = []
+        self.generator = ActionGenerator(self)
 
     def read_turn(self):
         alive = int(input())
@@ -145,20 +200,15 @@ class Game:
                 best = e
         return best
 
-    def move_action(self, agent):
-        enemy = self.closest_enemy(agent)
-        if enemy is None:
-            return "HUNKER_DOWN"
-        nxt = self.pathfinder.next_step(agent.pos, enemy.pos)
-        if nxt == agent.pos:
-            return "HUNKER_DOWN"
-        return f"MOVE {nxt.x} {nxt.y}"
-
+    def best_action(self, agent):
+        actions = self.generator.generate(agent)
+        return actions[0].command
+    
     def play(self):
         self.read_turn()
         actions = []
         for agent in self.my_agents:
-            actions.append(f"{agent.id};{self.move_action(agent)}")
+            actions.append(f"{agent.id};{self.best_action(agent)}")
         print("\n".join(actions))
 
 game = Game()
