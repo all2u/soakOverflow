@@ -91,3 +91,77 @@ class Pathfinder:
                 return start
         return cur
 
+class Game:
+    def __init__(self):
+        self.my_id = int(input())
+        # Agents (données fixes)
+        self.agent_count = int(input())
+        self.agents = {}
+        for _ in range(self.agent_count):
+            agent_id, player, shoot_cd, optimal_range, power, bombs = map(int, input().split())
+            self.agents[agent_id] = Agent(agent_id, player, shoot_cd, optimal_range, power, bombs)
+        # Carte
+        w, h = map(int, input().split())
+        self.map = GameMap(w, h)
+        for y in range(h):
+            data = list(map(int, input().split()))
+            for x in range(w):
+                tile = data[3 * x + 2]
+                self.map.grid[y][x] = Tile(tile)
+        self.pathfinder = Pathfinder(self.map)
+        self.my_agents = []
+        self.enemy_agents = []
+
+    def read_turn(self):
+        alive = int(input())
+        self.my_agents.clear()
+        self.enemy_agents.clear()
+        for _ in range(alive):
+            agent_id, x, y, cooldown, bombs, wetness = map(int, input().split())
+            a = self.agents[agent_id]
+            a.pos = Pos(x, y)
+            a.cooldown = cooldown
+            a.bombs = bombs
+            a.wetness = wetness
+        mine = int(input())
+        ids = []
+        for _ in range(mine):
+            ids.append(int(input()))
+        for a in self.agents.values():
+            if not a.alive:
+                continue
+            if a.id in ids:
+                self.my_agents.append(a)
+            else:
+                self.enemy_agents.append(a)
+
+    def closest_enemy(self, agent):
+        best = None
+        best_dist = 10 ** 9
+        for e in self.enemy_agents:
+            d = agent.pos.dist(e.pos)
+            if d < best_dist:
+                best_dist = d
+                best = e
+        return best
+
+    def move_action(self, agent):
+        enemy = self.closest_enemy(agent)
+        if enemy is None:
+            return "HUNKER_DOWN"
+        nxt = self.pathfinder.next_step(agent.pos, enemy.pos)
+        if nxt == agent.pos:
+            return "HUNKER_DOWN"
+        return f"MOVE {nxt.x} {nxt.y}"
+
+    def play(self):
+        self.read_turn()
+        actions = []
+        for agent in self.my_agents:
+            actions.append(f"{agent.id};{self.move_action(agent)}")
+        print("\n".join(actions))
+
+game = Game()
+
+while True:
+    game.play()
