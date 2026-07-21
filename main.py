@@ -1,44 +1,93 @@
 import sys
-import math
+from collections import deque
+from dataclasses import dataclass
 
-# Win the water fight by controlling the most territory, or out-soak your opponent!
+def debug(*args):
+    print(*args, file=sys.stderr, flush=True)
 
-my_id = int(input())  # Your player id (0 or 1)
-agent_data_count = int(input())  # Total number of agents in the game
-for i in range(agent_data_count):
-    # agent_id: Unique identifier for this agent
-    # player: Player id of this agent
-    # shoot_cooldown: Number of turns between each of this agent's shots
-    # optimal_range: Maximum manhattan distance for greatest damage output
-    # soaking_power: Damage output within optimal conditions
-    # splash_bombs: Number of splash bombs this can throw this game
-    agent_id, player, shoot_cooldown, optimal_range, soaking_power, splash_bombs = [int(j) for j in input().split()]
-# width: Width of the game map
-# height: Height of the game map
-width, height = [int(i) for i in input().split()]
-for i in range(height):
-    inputs = input().split()
-    for j in range(width):
-        # x: X coordinate, 0 is left edge
-        # y: Y coordinate, 0 is top edge
-        x = int(inputs[3*j])
-        y = int(inputs[3*j+1])
-        tile_type = int(inputs[3*j+2])
+@dataclass(frozen=True)
+class Pos:
+    x: int
+    y: int
 
-# game loop
-while True:
-    agent_count = int(input())  # Total number of agents still in the game
-    for i in range(agent_count):
-        # cooldown: Number of turns before this agent can shoot
-        # wetness: Damage (0-100) this agent has taken
-        agent_id, x, y, cooldown, splash_bombs, wetness = [int(j) for j in input().split()]
-    my_agent_count = int(input())  # Number of alive agents controlled by you
-    for i in range(my_agent_count):
+    def dist(self, other):
+        return abs(self.x - other.x) + abs(self.y - other.y)
 
-        # Write an action using print
-        # To debug: print("Debug messages...", file=sys.stderr, flush=True)
+    def neighbours(self):
+        return (
+            Pos(self.x + 1, self.y),
+            Pos(self.x - 1, self.y),
+            Pos(self.x, self.y + 1),
+            Pos(self.x, self.y - 1),
+        )
 
+class Agent:
+    def __init__(self, agent_id, player, shoot_cd, optimal_range, power, bombs):
+        self.id = agent_id
+        self.player = player
+        self.base_cd = shoot_cd
+        self.range = optimal_range
+        self.power = power
+        self.max_bombs = bombs
+        self.pos = Pos(0, 0)
+        self.cooldown = 0
+        self.bombs = bombs
+        self.wetness = 0
 
-        # One line per agent: <agentId>;<action1;action2;...> actions are "MOVE x y | SHOOT id | THROW x y | HUNKER_DOWN | MESSAGE text"
-        print("HUNKER_DOWN")
+    @property
+    def alive(self):
+        return self.wetness < 100
+
+class Tile:
+    EMPTY = 0
+    LOW = 1
+    HIGH = 2
+
+    def __init__(self, t):
+        self.type = t
+
+    @property
+    def walkable(self):
+        return self.type == Tile.EMPTY
+
+class GameMap:
+    def __init__(self, w, h):
+        self.w = w
+        self.h = h
+        self.grid = [[Tile(Tile.EMPTY) for _ in range(w)] for _ in range(h)]
+
+    def inside(self, p):
+        return 0 <= p.x < self.w and 0 <= p.y < self.h
+
+    def walkable(self, p):
+        return self.inside(p) and self.grid[p.y][p.x].walkable
+
+class Pathfinder:
+    def __init__(self, game_map):
+        self.map = game_map
+
+    def next_step(self, start, goal):
+        if start == goal:
+            return start
+        q = deque([start])
+        parent = {start: None}
+        while q:
+            cur = q.popleft()
+            if cur == goal:
+                break
+            for nxt in cur.neighbours():
+                if nxt in parent:
+                    continue
+                if not self.map.walkable(nxt):
+                    continue
+                parent[nxt] = cur
+                q.append(nxt)
+        if goal not in parent:
+            return start
+        cur = goal
+        while parent[cur] != start:
+            cur = parent[cur]
+            if cur is None:
+                return start
+        return cur
 
