@@ -99,6 +99,52 @@ class Action:
     def __lt__(self, other):
         return self.score < other.score
 
+class Explosion:
+    def __init__(self):
+        self.hit_enemies = 0
+        self.hit_allies = 0
+        self.enemy_damage = 0
+        self.ally_damage = 0
+        self.score = 0
+
+class Simulator:
+    def __init__(self, game):
+        self.game = game
+
+    def splash_cells(self, center):
+        cells = []
+        for dy in (-1,0,1):
+            for dx in (-1,0,1):
+                p = Pos(center.x+dx, center.y+dy)
+                if self.game.map.inside(p):
+                    cells.append(p)
+        return cells
+
+    def simulate_throw(self, agent, target):
+        result = Explosion()
+        cells = self.splash_cells(target)
+        # ennemis
+        for enemy in self.game.enemy_agents:
+            if enemy.pos in cells:
+                result.hit_enemies += 1
+                result.enemy_damage += agent.power
+        # alliés
+        for ally in self.game.my_agents:
+            if ally.id == agent.id:
+                continue
+            if ally.pos in cells:
+                result.hit_allies += 1
+                result.ally_damage += agent.power
+        return result
+
+    def evaluate_throw(self, explosion):
+        score = 0
+        score += explosion.enemy_damage*20
+        score += explosion.hit_enemies*100
+        score -= explosion.ally_damage*200
+        score -= explosion.hit_allies*500
+        return score
+
 class ActionGenerator:
     def __init__(self, game):
         self.game = game
@@ -140,9 +186,15 @@ class ActionGenerator:
 
     def generate_bombs(self, agent):
         actions = []
+        sim = self.game.simulator
         for enemy in self.game.enemy_agents:
-            if agent.pos.dist(enemy.pos) <= 4:
-                actions.append(Action(f"THROW {enemy.pos.x} {enemy.pos.y}", 150))
+            if agent.pos.dist(enemy.pos)>4:
+                continue
+            explosion = sim.simulate_throw(agent, enemy.pos)
+            score = sim.evaluate_throw(explosion)
+            if score<=0:
+                continue
+            actions.append(Action(f"THROW {enemy.pos.x} {enemy.pos.y}", score))
         return actions
 
 class Game:
@@ -166,6 +218,7 @@ class Game:
         self.my_agents = []
         self.enemy_agents = []
         self.generator = ActionGenerator(self)
+        self.simulator = Simulator(self)
 
     def read_turn(self):
         alive = int(input())
